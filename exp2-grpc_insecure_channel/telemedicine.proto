@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+package telemedicine;
+
+service TelemedicineService {
+
+  // Unary RPC
+  rpc GetPrescription (PatientRequest) returns (Prescription);
+
+  // Server Streaming RPC
+  rpc GetDoctorInstructions (PatientRequest) returns (stream Instruction);
+
+  // Client Streaming RPC
+  rpc SendVitals (stream Vital) returns (VitalsSummary);
+
+  // Bidirectional Streaming RPC
+  rpc LiveConsultation (stream ChatMessage) returns (stream ChatMessage);
+}
+
+message PatientRequest {
+  string patient_id = 1;
+  string symptoms = 2;
+}
+
+message Prescription {
+  string medicines = 1;
+  string advice = 2;
+}
+
+message Instruction {
+  string message = 1;
+}
+
+message Vital {
+  string type = 1;     // HeartRate, BP, Temp
+  float value = 2;
+}
+
+message VitalsSummary {
+  string summary = 1;
+}
+
+message ChatMessage {
+  string sender = 1;   // Doctor / Patient
+  string message = 2;
+}
+
