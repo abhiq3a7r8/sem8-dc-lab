@@ -6,52 +6,90 @@ import time
 
 def unary_rpc(stub):
     print("\n[Unary RPC] Prescription")
+
+    start = time.perf_counter()
     response = stub.GetPrescription(
         telemedicine_pb2.PatientRequest(
             patient_id="P101",
             symptoms="Fever and headache"
         )
     )
+    end = time.perf_counter()
+
     print("Medicines:", response.medicines)
     print("Advice:", response.advice)
+    print(f"Unary latency: {(end - start) * 1000:.2f} ms")
 
 
 def server_streaming_rpc(stub):
     print("\n[Server Streaming RPC] Doctor Instructions")
+
+    request_time = time.perf_counter()
+    count = 0
+
     for instruction in stub.GetDoctorInstructions(
         telemedicine_pb2.PatientRequest(patient_id="P101")
     ):
-        print("Instruction:", instruction.message)
+        recv_time = time.perf_counter()
+        latency = recv_time - request_time
+
+        print(
+            f"Instruction {count + 1}: {instruction.message} "
+            f"(Latency: {latency:.2f} sec)"
+        )
+
+        request_time = recv_time
+        count += 1
+
+    print(f"Total instructions received: {count}")
 
 
 def client_streaming_rpc(stub):
     print("\n[Client Streaming RPC] Sending Patient Vitals")
 
+    vitals_data = [
+        ("BodyTemperature_C", 37.0),
+        ("HeartRate_bpm", 76),
+        ("SpO2_percent", 97),
+        ("SystolicBP_mmHg", 118),
+        ("DiastolicBP_mmHg", 78)
+    ]
+
+    send_times = {}
+
     def vitals():
-        data = [
-            ("Temperature", 98.4),
-            ("Heart Rate", 76),
-            ("Blood Pressure", 118)
-        ]
-        for t, v in data:
-            print(f"Sending {t}: {v}")
-            yield telemedicine_pb2.Vital(type=t, value=v)
+        for v_type, value in vitals_data:
+            send_times[v_type] = time.perf_counter()
+            print(f"Sending {v_type}: {value}")
+            yield telemedicine_pb2.Vital(
+                type=v_type,
+                value=value
+            )
             time.sleep(1)
 
+    start = time.perf_counter()
     response = stub.SendVitals(vitals())
+    end = time.perf_counter()
+
     print("Server Summary:", response.summary)
+    print(f"Total client streaming latency: {(end - start):.2f} sec")
 
 
 def bidirectional_streaming_rpc(stub):
     print("\n[Bidirectional Streaming RPC] Live Consultation")
 
+    messages_data = [
+        "Dizziness observed",
+        "Severe headache persists",
+        "Vitals stabilized",
+        "Symptoms improving"
+    ]
+
+    send_times = {}
+
     def messages():
-        msgs = [
-            "I am feeling dizzy",
-            "Headache is severe",
-            "Feeling better now"
-        ]
-        for msg in msgs:
+        for msg in messages_data:
+            send_times[msg] = time.perf_counter()
             print("Patient:", msg)
             yield telemedicine_pb2.ChatMessage(
                 sender="Patient",
@@ -59,8 +97,23 @@ def bidirectional_streaming_rpc(stub):
             )
             time.sleep(1)
 
+    replies = 0
+
     for reply in stub.LiveConsultation(messages()):
-        print("Doctor:", reply.message)
+        recv_time = time.perf_counter()
+
+        # Match reply with last sent message (lab-safe assumption)
+        last_sent_msg = messages_data[replies]
+        latency = recv_time - send_times[last_sent_msg]
+
+        print(
+            f"Doctor: {reply.message} "
+            f"(RTT Latency: {latency:.2f} sec)"
+        )
+
+        replies += 1
+
+    print(f"Doctor replies received: {replies}")
 
 
 def main():
